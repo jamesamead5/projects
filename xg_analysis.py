@@ -1,7 +1,6 @@
 import subprocess
 
 subprocess.run(['sudo','python3','-m','pip','install','-r','requirements.txt'])
-subprocess.run(['sudo','pip','install','numpy'])
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,7 +24,7 @@ def find_file_loc(name, path):
             print(f"Found '{name}'")
             return os.path.join(root, name)
     raise Exception(f"'{name}' could not be found anywhere within '{path}'")
-    
+
 home_dir = os.path.expanduser('~') # Get user's home directory
 target_dir = os.path.join(home_dir,'xg_analysis') # Add xg_analysis onto end of user directory path
 
@@ -33,20 +32,20 @@ target_dir = os.path.join(home_dir,'xg_analysis') # Add xg_analysis onto end of 
 if 'xg_analysis' not in [val.name for val in os.scandir(home_dir)]:
     print(f"'{target_dir}' does not exist. Creating folder in '{home_dir}' now")
     os.mkdir(target_dir)
-    
+
 # Searching for chromedriver to be used to gather data from fbref
 if 'chromedriver' not in [val.name for val in os.scandir(target_dir)]:
     try:
         print(f"chromedriver does not exist in '{target_dir}' directory. Starting process to find and move it now")
         chrome_driver_path = find_file_loc('chromedriver',home_dir) # Searches for chromedriver within user directory
         new_file = os.path.join(target_dir,'chromedriver') # Creates path for where chromedriver should be for use later on (xg_analysis folder)
-        print('Moving across chromedriver to folder') 
+        print('Moving across chromedriver to folder')
         subprocess.run(['mv',f'{chrome_driver_path}',f'{new_file}']) # Moves chromedriver from existing location to xg_analysis folder
     except Exception as e:
         print(e) # Exception from find_file_loc function
         print('Make sure you have installed selenium and downloaded chromedriver')
         print('chromedriver can be downloaded at https://chromedriver.chromium.org/downloads')
-        
+
 print('Setup of necessary files and directories is complete!')
 
 class xg_analysis(pd.DataFrame):
@@ -57,10 +56,10 @@ class xg_analysis(pd.DataFrame):
                  full_xpath='/html/body/div[3]/div[6]/div[2]/div[1]/div/ul/li[1]/div/ul/li[3]/button'):
         """Creates a pandas dataframe with team, score, date and xG values for all teams in current season.
         Uses selenium to download data from fbref website to achieve this"""
-        
+
         download_path=os.path.join(os.path.expanduser('~'),'xg_analysis') # Specifying where Excel file from fbref should be downloaded to
         super(xg_analysis,self).__init__() # Initialising empty dataframe
-        
+
         self.url = url
 
         # Specifying necessary chromedriver options:
@@ -69,7 +68,7 @@ class xg_analysis(pd.DataFrame):
         chrome_options.add_experimental_option('prefs', prefs)
         chrome_options.add_argument('--headless') # All chromedriver activity be done in background
         driver = webdriver.Chrome(service=webdriver.chrome.service.Service(executable_path=chrome_drive_loc),
-                                  options=chrome_options) # Creates browser session 
+                                  options=chrome_options) # Creates browser session
         driver.get(url) # Loads fbref url in browser session
 
         # Finding download link for dataset in fbref using HTML xpath
@@ -79,7 +78,7 @@ class xg_analysis(pd.DataFrame):
         driver.execute_script("arguments[0].click();", excel) # Explicitly specifying chromedriver to click on link. click method does not work
 
         driver.close() # closing the webdriver
-        
+
         # Gathering data from excel file produced from clicking download link
         df = pd.DataFrame(pd.read_html(download_path+'/sportsref_download.xls',
                                              encoding='UTF-8')[0])
@@ -88,20 +87,20 @@ class xg_analysis(pd.DataFrame):
         df['Date'] = pd.to_datetime(df['Date'])
         df.sort_values(by='Date',inplace=True)
         df.reset_index(inplace=True,drop=True)
-        
+
         # Saving original dataframe for personal use or for method reverting changes back to original dataframe
         df.to_csv(download_path+'/xg_analysis.csv',index=False)
-        
-        super(xg_analysis,self).__init__(df) # Creating object as pandas dataframe so can use any pandas functions/methods desired on instance 
-    
+
+        super(xg_analysis,self).__init__(df) # Creating object as pandas dataframe so can use any pandas functions/methods desired on instance
+
     def choose_team(self,team=None):
         """Chooses team to conduct xG analysis on. Either by specifying team exactly, choosing from dropdown
            list of teams most likely meant from input, or choosing from dropdown list of all teams (default value)"""
-        
+
         # Get list of all Premier League teams in current season and order them alphabetically
         all_teams = list(set(self.Home).intersection(self.Away))
         all_teams = sorted(all_teams)
-        
+
         # Function used to create tkinter window with dropdown. Defined here to simplify and shorten code below
         def option_window(title_txt,val_list,question_asked=False):
             root = tk.Tk() # Initialise tkinter window
@@ -117,7 +116,7 @@ class xg_analysis(pd.DataFrame):
 
             # For use with dropdown with all teams (no 'team' argument specified)
             button = tk.Button(root,text='Confirm',command=confirm_val) # Adding 'Confirm' button to window
-            dropdown.place(x=150,y=100) # Placing dropdown within window 
+            dropdown.place(x=150,y=100) # Placing dropdown within window
 
             if question_asked: # Used when 'team' argument specified but not found in team list (Did you mean 'x' team?)
 
@@ -140,14 +139,14 @@ class xg_analysis(pd.DataFrame):
             root.mainloop() # Open window
             choice = choice.get() # Retrieve choice string value from dropdown list
             return choice
-        
+
         # Generate dropdown list with all teams if 'team' argument is left as default/None
         if team == None:
-            
+
             team_choice = option_window('Choose a team',all_teams)
-            
+
             df = self[(self['Home']==team_choice) | (self['Away']==team_choice)]
-            
+
         # If team specified and resulting dataframe is empty, looks to generate list of possibly meant choices
         else:
 
@@ -168,8 +167,8 @@ class xg_analysis(pd.DataFrame):
 
                 metric_vals = get_distances(team_choice,all_teams)
                 # Limits on metric values for possible match have been set through examination of values
-                filtered_list = list(filter(lambda x: team_choice in x['name'] or x['dam_lev'] > 0.5 
-                                            or x['jaro'] > 0.7 
+                filtered_list = list(filter(lambda x: team_choice in x['name'] or x['dam_lev'] > 0.5
+                                            or x['jaro'] > 0.7
                                             or x['jaro_wink'] > 0.7,metric_vals))
                 sorted_list = sorted(filtered_list,key = lambda x: (x['jaro'],x['jaro_wink'],x['dam_lev']),
                                      reverse=True)
@@ -191,7 +190,7 @@ class xg_analysis(pd.DataFrame):
         self.team_choice = team_choice # Add team_choice as object attribute (for use in other methods)
         df.reset_index(inplace=True,drop=True)
         super(xg_analysis,self).__init__(df) # Return updated dataframe
-        
+
     def revert_choice(self):
         """Reverts back to original dataframe with data on all teams so that choice can be made again"""
         try: # Deletes team_choice attribute and changes instance to original dataframe
@@ -205,7 +204,7 @@ class xg_analysis(pd.DataFrame):
             print('Instance will have to be re-initialised in order to revert to original DataFrame')
             return
         super(xg_analysis,self).__init__(df) # Return updated dataframe
-        
+
     def _get_columns(self):
         """Generates a variety of columns that are used for visual anaysis of a team's xG values"""
         xgf = []
@@ -247,7 +246,7 @@ class xg_analysis(pd.DataFrame):
         self['Side'] = side
         self['Result'] = result
         self['Win/Draw/Loss'] = wdl
-        
+
     def _initialise_graph(self,line_cols,line_names,y_axis_vars,hover_data,
                           diff,ytitle,title):
         """Initialises graph for use in xg_graph and xg_graph_diff methods. Creates two different types of graphs
@@ -265,16 +264,16 @@ class xg_analysis(pd.DataFrame):
         else:
             fig['data'][0]['hovertemplate'] = 'Variable=xG_diff<br>Matchday=%{x}<br>Value=%{y}<br>Side=%{customdata[0]}<br>W/D/L=%{customdata[1]}<br>Result=%{customdata[2]}<br>xGf=%{customdata[3]}<br>xGa=%{customdata[4]}<extra></extra>'
             fig.add_hline(y=0) # Add 0 line to graph for help analysing difference between xG for and against
-            
+
         # Update layout with specific axes and background colours, alongside content and placement of title
-        fig.update_layout(xaxis=dict(showline=True,linecolor='rgb(153, 153, 153)',linewidth=2), 
+        fig.update_layout(xaxis=dict(showline=True,linecolor='rgb(153, 153, 153)',linewidth=2),
                   yaxis=dict(showline=True,linecolor='rgb(153, 153, 153)',linewidth=2),
                   showlegend=True,plot_bgcolor='white',hoverlabel=dict(bgcolor="white"),
                   yaxis_title=ytitle,title_x=0.5)
         fig.update_traces(mode='markers+lines')
-        
+
         return fig
-    
+
     def _calculate_averages(self,avg_length):
         """Calculates averages of xG for and against values over a specified number of matches"""
         xgf_avg = []
@@ -292,7 +291,7 @@ class xg_analysis(pd.DataFrame):
         xgf_col = 'xGf_avg{num}'.format(num=str(avg_length)) # Create string value of new column name to added for average xG for
         xga_col = 'xGa_avg{num}'.format(num=str(avg_length)) # Create string value of new column name to added for average xG for
         return (xgf_col,xga_col,xgf_avg,xga_avg)
-        
+
     def xg_graph(self,avg_length,team_choice=None):
         """Produces a graph showing a chosen team's average (over a specified number of matches) xG values
            for and against over a season"""
@@ -325,7 +324,7 @@ class xg_analysis(pd.DataFrame):
                                             'xGF/xGA {num} game averages'.format(num=str(avg_length)),
                                             '{team} xG For and Against Average Over {num} Games Plot'.format(team=self.team_choice,num=avg_length))
         figure.show()
-        
+
     def xg_graph_diff(self,avg_length,team_choice=None):
         """Produces a graph showing a chosen team's difference in average (over a specified number of matches)
            xG values for and against over a season"""
