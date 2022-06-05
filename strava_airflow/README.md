@@ -12,4 +12,4 @@ The flow's tasks are as follows:
 
 - __append_run_data__: If new data is found, it is then appended to the existing JSON-formatted data.
 
-I have scheduled the DAG to run every day at 13:00 and 19:00 to ensure data is gathered relatively soon after it is created.
+I have scheduled the DAG to run every day at 13:00 and 20:00 (local time) to ensure data is gathered relatively soon after it is created.
