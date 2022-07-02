@@ -1,9 +1,10 @@
 import subprocess
 
-subprocess.run(['sudo','python3','-m','pip','install','-r','requirements.txt'])
+subprocess.run(['pip','install','-r','requirements.txt'])
 
 import requests
 from bs4 import BeautifulSoup
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import pandas as pd
@@ -15,38 +16,38 @@ from fastDamerauLevenshtein import damerauLevenshtein
 import jaro
 import plotly.express as px
 
-def find_file_loc(name, path):
-    """Searches for a file within subdirectories of given path. Returns file path of file if found or raises
-    exception if no file found"""
-    print(f"Attempting to find '{name}'. This may take a while depending on size of subdirectories in '{path}'")
-    for root, dirs, files in os.walk(path):
-        if name in files:
-            print(f"Found '{name}'")
-            return os.path.join(root, name)
-    raise Exception(f"'{name}' could not be found anywhere within '{path}'")
+# def find_file_loc(name, path):
+#     """Searches for a file within subdirectories of given path. Returns file path of file if found or raises
+#     exception if no file found"""
+#     print(f"Attempting to find '{name}'. This may take a while depending on size of subdirectories in '{path}'")
+#     for root, dirs, files in os.walk(path):
+#         if name in files:
+#             print(f"Found '{name}'")
+#             return os.path.join(root, name)
+#     raise Exception(f"'{name}' could not be found anywhere within '{path}'")
 
-home_dir = os.path.expanduser('~') # Get user's home directory
-target_dir = os.path.join(home_dir,'xg_analysis') # Add xg_analysis onto end of user directory path
+# home_dir = os.path.expanduser('~') # Get user's home directory
+# target_dir = os.path.join(home_dir,'xg_analysis') # Add xg_analysis onto end of user directory path
 
-# If xg_analysis folder does not exist in the home directory yet, creates it
-if 'xg_analysis' not in [val.name for val in os.scandir(home_dir)]:
-    print(f"'{target_dir}' does not exist. Creating folder in '{home_dir}' now")
-    os.mkdir(target_dir)
+# # If xg_analysis folder does not exist in the home directory yet, creates it
+# if 'xg_analysis' not in [val.name for val in os.scandir(home_dir)]:
+#     print(f"'{target_dir}' does not exist. Creating folder in '{home_dir}' now")
+#     os.mkdir(target_dir)
 
-# Searching for chromedriver to be used to gather data from fbref
-if 'chromedriver' not in [val.name for val in os.scandir(target_dir)]:
-    try:
-        print(f"chromedriver does not exist in '{target_dir}' directory. Starting process to find and move it now")
-        chrome_driver_path = find_file_loc('chromedriver',home_dir) # Searches for chromedriver within user directory
-        new_file = os.path.join(target_dir,'chromedriver') # Creates path for where chromedriver should be for use later on (xg_analysis folder)
-        print('Moving across chromedriver to folder')
-        subprocess.run(['mv',f'{chrome_driver_path}',f'{new_file}']) # Moves chromedriver from existing location to xg_analysis folder
-    except Exception as e:
-        print(e) # Exception from find_file_loc function
-        print('Make sure you have installed selenium and downloaded chromedriver')
-        print('chromedriver can be downloaded at https://chromedriver.chromium.org/downloads')
+# # Searching for chromedriver to be used to gather data from fbref
+# if 'chromedriver' not in [val.name for val in os.scandir(target_dir)]:
+#     try:
+#         print(f"chromedriver does not exist in '{target_dir}' directory. Starting process to find and move it now")
+#         chrome_driver_path = find_file_loc('chromedriver',home_dir) # Searches for chromedriver within user directory
+#         new_file = os.path.join(target_dir,'chromedriver') # Creates path for where chromedriver should be for use later on (xg_analysis folder)
+#         print('Moving across chromedriver to folder')
+#         subprocess.run(['mv',f'{chrome_driver_path}',f'{new_file}']) # Moves chromedriver from existing location to xg_analysis folder
+#     except Exception as e:
+#         print(e) # Exception from find_file_loc function
+#         print('Make sure you have installed selenium and downloaded chromedriver')
+#         print('chromedriver can be downloaded at https://chromedriver.chromium.org/downloads')
 
-print('Setup of necessary files and directories is complete!')
+# print('Setup of necessary files and directories is complete!')
 
 class xg_analysis(pd.DataFrame):
     """Allows for visual analysis of xG values for all teams from English Premier League for current season"""
@@ -60,13 +61,19 @@ class xg_analysis(pd.DataFrame):
         download_path=os.path.join(os.path.expanduser('~'),'xg_analysis') # Specifying where Excel file from fbref should be downloaded to
         super(xg_analysis,self).__init__() # Initialising empty dataframe
 
+        if 'sportsref_download.xls' in [val.name for val in os.scandir(download_path)]:
+            fbref_dl_path = download_path + '/sportsref_download.xls'
+            subprocess.run(['rm',f'{fbref_dl_path}'])
+
         self.url = url
 
         # Specifying necessary chromedriver options:
         chrome_options = webdriver.ChromeOptions()
         prefs = {'download.default_directory' : download_path}
         chrome_options.add_experimental_option('prefs', prefs)
-        chrome_options.add_argument('--headless') # All chromedriver activity be done in background
+        #chrome_options.add_argument('--headless') # All chromedriver activity be done in background # Appears not to work in headless mode after accounting for privacy message
+        new_driver_path = ChromeDriverManager(path=download_path).install()
+        subprocess.run(['mv',f'{new_driver_path}',f'{download_path}'])
         driver = webdriver.Chrome(service=webdriver.chrome.service.Service(executable_path=chrome_drive_loc),
                                   options=chrome_options) # Creates browser session
         driver.get(url) # Loads fbref url in browser session
@@ -74,6 +81,26 @@ class xg_analysis(pd.DataFrame):
         # Finding download link for dataset in fbref using HTML xpath
         self.xpath = xpath # More adaptable xpath than the full one below
         self.full_xpath = full_xpath # Would break if HTML chsnged only slightly
+
+        # To get past data consent pop-up
+        try:
+            data_privacy = driver.find_elements(by=By.CLASS_NAME, value = 'qc-cmp2-summary-buttons')
+            try:
+                for val in data_privacy:
+                    found = False
+                    dp1 = val.find_elements(by=By.TAG_NAME, value = 'span')
+                    for val_1 in dp1:
+                        if val_1.text == 'DISAGREE':
+                            found = True
+                            driver.execute_script("arguments[0].click();", val_1)
+                            break
+                    if found:
+                        break
+            except:
+                pass
+        except:
+            print('No consent confirmation')
+
         excel = driver.find_element(by=By.XPATH, value = xpath)
         driver.execute_script("arguments[0].click();", excel) # Explicitly specifying chromedriver to click on link. click method does not work
 
