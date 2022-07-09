@@ -15,6 +15,8 @@ from tkinter import ttk
 from fastDamerauLevenshtein import damerauLevenshtein
 import jaro
 import plotly.express as px
+import time
+from datetime import datetime
 
 # def find_file_loc(name, path):
 #     """Searches for a file within subdirectories of given path. Returns file path of file if found or raises
@@ -50,20 +52,66 @@ import plotly.express as px
 # print('Setup of necessary files and directories is complete!')
 
 class xg_analysis(pd.DataFrame):
-    """Allows for visual analysis of xG values for all teams from English Premier League for current season"""
-    def __init__(self,url="https://fbref.com/en/comps/9/schedule/Premier-League-Scores-and-Fixtures",
-                 chrome_drive_loc=os.path.join(os.path.expanduser('~'),'xg_analysis/chromedriver'),
+    """Allows for visual analysis of xG values for all teams from any of the Big 5 Leagues from
+    any season from 2017-18 (data not available before this season)"""
+    def __init__(self,league,season,chrome_drive_loc=os.path.join(os.path.expanduser('~'),'xg_analysis/chromedriver'),
                  xpath='//*[@id="sched_11160_1_sh"]/div/ul/li[1]/div/ul/li[3]/button',
                  full_xpath='/html/body/div[3]/div[6]/div[2]/div[1]/div/ul/li[1]/div/ul/li[3]/button'):
         """Creates a pandas dataframe with team, score, date and xG values for all teams in current season.
         Uses selenium to download data from fbref website to achieve this"""
 
+        # Check to see whether season passed to __init__ function is valid
+        def season_check(season):
+            curr_year = datetime.today().year
+            try:
+                years = season.split('-')
+            except:
+                raise Exception("Season value not in correct format. Must be 'YYYY-YYYY', 'YYYY-YY' or 'YY-YY'")
+            try:
+                int_years = [int(val) for val in years]
+            except:
+                raise Exception('At least one year within season value is not an integer')
+            if int(years[0][-2:]) + 1 != int(years[1][-2:]):
+                raise Exception('Season years must be consecutive integers')
+            if len(years[0]) == 4 and len(years[1]) == 4:
+                if int_years[0] < 2017 or int_years[1] > curr_year + 1:
+                    raise Exception('No xG data available for given season')
+                else:
+                    chosen_season = season
+            elif len(years[0]) == 4 and len(years[1]) == 2:
+                if int_years[0] < 2017 or int_years[1] > int(str(curr_year)[-2:]) + 1:
+                    raise Exception('No xG data available for given season')
+                else:
+                    chosen_season = str(int_years[0]) + '-20' + str(int_years[1])
+            elif len(years[0]) == 2 and len(years[1]) == 2:
+                if int_years[0] < 17 or int_years[1] > int(str(curr_year)[-2:]) + 1:
+                    raise Exception('No xG data available for given season')
+                else:
+                    chosen_season = '20' + str(int_years[0]) + '-20' + str(int_years[1])
+            return chosen_season
+
+        season = season_check(season)
+
+        # Check to see whether league passed to __init__ function is valid
+        poss_leagues = ['Premier League','La Liga','Bundesliga','Serie A','Ligue 1']
+        if league not in poss_leagues:
+            for val in poss_leagues:
+                print(val)
+            raise Exception('League argument either spelt wrong or not in Big 5 leagues. Possible leagues are shown above.')
+
+        # Set URL for selenium as info on Big 5 leagues for given season
+        url = f'https://fbref.com/en/comps/Big5/{season}/{season}-Big-5-European-Leagues-Stats'
+
         download_path=os.path.join(os.path.expanduser('~'),'xg_analysis') # Specifying where Excel file from fbref should be downloaded to
         super(xg_analysis,self).__init__() # Initialising empty dataframe
 
-        if 'sportsref_download.xls' in [val.name for val in os.scandir(download_path)]:
-            fbref_dl_path = download_path + '/sportsref_download.xls'
-            subprocess.run(['rm',f'{fbref_dl_path}'])
+        # Check to see whether data on xG already exists (from previous run) in xg_analysis folder and removes the file
+        # if any found
+        xg_files = [val.name for val in os.scandir(download_path)]
+        for val in xg_files:
+            if 'sportsref_download' in val:
+                fbref_dl_path = download_path + '/' + val
+                subprocess.run(['rm',f'{fbref_dl_path}'])
 
         self.url = url
 
@@ -81,6 +129,11 @@ class xg_analysis(pd.DataFrame):
         # Finding download link for dataset in fbref using HTML xpath
         self.xpath = xpath # More adaptable xpath than the full one below
         self.full_xpath = full_xpath # Would break if HTML chsnged only slightly
+
+        self.chosen_season = season
+        self.chosen_league = league
+
+        time.sleep(3) # Add more human-typical action to get past reCAPTCHA
 
         # To get past data consent pop-up
         try:
@@ -101,8 +154,25 @@ class xg_analysis(pd.DataFrame):
         except:
             print('No consent confirmation')
 
-        excel = driver.find_element(by=By.XPATH, value = xpath)
-        driver.execute_script("arguments[0].click();", excel) # Explicitly specifying chromedriver to click on link. click method does not work
+        time.sleep(3) # Add more human-typical action to get past reCAPTCHA
+
+        league = driver.find_elements(by=By.LINK_TEXT, value = league) # Search for link in URL for data on league given
+        driver.get(league[0].get_property('href')) # Go to first link found using logic in previous step
+        time.sleep(3) # Add more human-typical action to get past reCAPTCHA
+
+        fixtures = driver.find_elements(by=By.LINK_TEXT,value = 'Scores & Fixtures') # Search for link in URL for data on score and fixtures (where the xG data lies)
+        # Ensure correct link is clicked on (must contain 'Scores' and 'Fixtures')
+        for val in fixtures:
+            if 'Scores' in val.get_property('href') and 'Fixtures' in val.get_property('href'):
+                driver.get(val.get_property('href')) # Go to link using logic in if statement
+                break
+
+        button = driver.find_elements(by=By.TAG_NAME,value='button') # Search for section of page where download of data is possible
+        # Ensure correct button is clicked on (must contain 'Excel' in 'tip' tag)
+        for val in button:
+            if val.get_attribute('tip') is not None and 'Excel' in val.get_attribute('tip'):
+                driver.execute_script("arguments[0].click();", val) # Explicitly specifying chromedriver to click on link. click method does not work
+                break
 
         driver.close() # closing the webdriver
 
@@ -342,14 +412,14 @@ class xg_analysis(pd.DataFrame):
                                              'xGa_avg{num}'.format(num=str(avg_length))],
                                             ['Side','Win/Draw/Loss','Result','xGf','xGa'],False,
                                             'xGF/xGA',
-                                            '{team} xG For and Against Plot'.format(team=self.team_choice))
+                                            '{team} xG For and Against in {season} Season Plot'.format(team=self.team_choice,season=self.chosen_season))
         else:
             figure = self._initialise_graph(['#26ab40','#EF553B'],['xGf','xGa'],
                                             ['xGf_avg{num}'.format(num=str(avg_length)),
                                              'xGa_avg{num}'.format(num=str(avg_length))],
                                             ['Side','Win/Draw/Loss','Result','xGf','xGa'],False,
                                             'xGF/xGA {num} game averages'.format(num=str(avg_length)),
-                                            '{team} xG For and Against Average Over {num} Games Plot'.format(team=self.team_choice,num=avg_length))
+                                            '{team} xG For and Against Average Over {num} Games in {season} Season Plot'.format(team=self.team_choice,num=avg_length,season=self.chosen_season))
         figure.show()
 
     def xg_graph_diff(self,avg_length,team_choice=None):
@@ -375,11 +445,11 @@ class xg_analysis(pd.DataFrame):
                                             ['xG_diff_avg{num}'.format(num=str(avg_length))],
                                             ['Side','Win/Draw/Loss','Result','xGf','xGa'],True,
                                             'xGF/xGA difference',
-                                            '{team} xG Difference Plot'.format(team=self.team_choice))
+                                            '{team} xG Difference in {season} Season Plot'.format(team=self.team_choice,season=self.chosen_season))
         else:
             figure = self._initialise_graph(['#636efa'],['xG diff'],
                                             ['xG_diff_avg{num}'.format(num=str(avg_length))],
                                             ['Side','Win/Draw/Loss','Result','xGf','xGa'],True,
                                             'xGF/xGA difference {num} game averages'.format(num=str(avg_length)),
-                                            '{team} xG Difference Average Over {num} Games Plot'.format(team=self.team_choice,num=avg_length))
+                                            '{team} xG Difference Average Over {num} Games in {season} Season Plot'.format(team=self.team_choice,num=avg_length,season=self.chosen_season))
         figure.show()
