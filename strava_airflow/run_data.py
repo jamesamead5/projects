@@ -94,7 +94,7 @@ def gather_detailed_info(ti):
                 weather_params = {'lat':'56.15372056606176','lon':'-3.8009364730092274',
                           'dt':str(int(time.mktime(datetime.datetime.strptime(run['start_date_local'],"%Y-%m-%dT%H:%M:%SZ").timetuple()))),
                           'units':'metric',
-                          'appid':'1da4ae24104d1258c08bac335463358f'}
+                          'appid': API KEY}
                 weather_req = requests.get(weather_url, params=weather_params)
                 weather_req = weather_req.json()
             except:
