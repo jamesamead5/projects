@@ -64,7 +64,7 @@ def trigger_other_tasks(ti):
 
 def gather_detailed_info(ti):
 
-    with open('/Users/jamesmead/Run Data/credentials_test.json','r') as fid:
+    with open('/Users/jamesmead/Run Data/credentials.json','r') as fid:
         creds = json.load(fid)
 
     act_ids = ti.xcom_pull(key='id_info')
@@ -120,7 +120,12 @@ def append_run_data(ti):
     with open('/Users/jamesmead/Run Data/run_data.json','w') as fid:
         json.dump(run_data,fid)
 
-dag = DAG('Strava_data_grab', description= 'DAG to search for most recent run data from Strava and add to existing data if new',
+dag_args = {
+'email': ['jamesamead5@gmail.com'],
+'email_on_failure': True
+}
+
+dag = DAG('Strava_data_grab', default_args = dag_args, description= 'DAG to search for most recent run data from Strava and add to existing data if new',
 schedule_interval=None,#'0 12,19 * * *',
 start_date=datetime.datetime(2022, 6, 5), catchup=False)
 
