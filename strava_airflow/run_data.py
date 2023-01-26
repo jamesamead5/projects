@@ -115,7 +115,8 @@ def append_run_data(ti):
     new_run_data = ti.xcom_pull(key='run_info')
 
     for val in new_run_data:
-        run_data.append(val)
+        if val not in run_data:
+            run_data.append(val)
 
     with open('/Users/jamesmead/Run Data/run_data.json','w') as fid:
         json.dump(run_data,fid)
